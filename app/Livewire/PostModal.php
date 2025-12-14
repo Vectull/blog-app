@@ -10,41 +10,36 @@ class PostModal extends Component
 {
     public $post = null;
     public $content = '';
-    public $editing = false;
 
     #[On('open-post-modal')]
     public function open($postId)
     {
         $this->post = Post::findOrFail($postId);
-        $this->content = $this->post->content;
-        $this->editing = false;
+        $this->content = $this->post->content ?: '<p>Кликните, чтобы редактировать...</p>';
 
-        // Открываем модальное чистым Bootstrap JS
         $this->js("
             const modalEl = document.getElementById('postModal');
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
             history.pushState(null, '', '/posts/{$postId}');
+
+            // Передаём контент в Alpine
+            Alpine.store('postModal', {
+                content: " . json_encode($this->content) . ",
+                postId: {$postId},
+                title: " . json_encode($this->post->title) . "
+            });
         ");
     }
 
-    public function startEditing()
-    {
-        $this->editing = true;
+   #[On('save-post-content')]
+public function savePostContent($content)
+{
+    if ($this->post) {
+        $this->post->update(['content' => $content]);
+        $this->content = $content;
     }
-
-    public function save()
-    {
-        $this->post->update(['content' => $this->content]);
-        $this->editing = false;
-    }
-
-    public function cancel()
-    {
-        $this->content = $this->post->content;
-        $this->editing = false;
-    }
-
+}
     public function render()
     {
         return view('livewire.post-modal');

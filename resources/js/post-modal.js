@@ -1,83 +1,69 @@
-import { Modal } from 'bootstrap';
 import Quill from 'quill';
 
-window.addEventListener('alpine:initializing', () => {
+document.addEventListener('alpine:init', () => {
     Alpine.data('postModal', () => ({
-        isOpen: false,
         editing: false,
-        content: '',
-        postId: null,
         quill: null,
-        bootstrapModal: null,
+        originalContent: '',
 
         init() {
-            const modalElement = this.$el;
-            this.bootstrapModal = new Modal(modalElement);
+            this.originalContent = Alpine.store('postModal').content || '';
 
-            Livewire.on('modal-opened', (data) => {
-                this.postId = data.postId;
-                this.content = data.content || '';
+            // Очистка Quill при закрытии модального (важно!)
+            const modalEl = document.getElementById('postModal');
+            modalEl.addEventListener('hidden.bs.modal', () => {
                 this.editing = false;
-
-                // Обновляем Livewire-свойства для отображения в blade
-                this.$wire.set('post', { id: this.postId });
-                this.$wire.set('content', this.content);
-
-                this.bootstrapModal.show();
-                history.pushState({}, '', `/posts/${this.postId}`);
-            });
-
-            modalElement.addEventListener('hidden.bs.modal', () => {
-                this.isOpen = false;
-                this.editing = false;
-                this.content = '';
-                this.postId = null;
-                history.pushState({}, '', '/posts');
-                this.$wire.set('post', null);
-                this.$wire.set('content', '');
-
                 if (this.quill) {
-                    this.quill.destroy();
-                    this.quill = null;
+                    this.quill = null; // Полная очистка
                 }
-            });
-
-            // Popstate
-            window.addEventListener('popstate', () => {
-                const path = window.location.pathname;
-                if (path.startsWith('/posts/') && path !== '/posts') {
-                    const id = parseInt(path.split('/').pop());
-                    if (!isNaN(id)) {
-                        Livewire.dispatch('open-post-modal', { postId: id });
-                    }
-                } else {
-                    this.bootstrapModal.hide();
-                }
+                // Очищаем контейнер на всякий случай
+                const editor = document.querySelector('#quill-editor');
+                if (editor) editor.innerHTML = '';
             });
         },
 
         startEditing() {
             this.editing = true;
             this.$nextTick(() => {
-                if (!this.quill) {
-                    this.quill = new Quill('#quill-editor', {
+                // Всегда создаём новый инстанс Quill
+                const container = document.querySelector('#quill-editor');
+                if (container && !this.quill) {
+                    this.quill = new Quill(container, {
                         theme: 'snow',
                         modules: {
                             toolbar: true
                         }
                     });
-                    this.quill.root.innerHTML = this.content;
+
+                    this.quill.root.innerHTML = Alpine.store('postModal').content || '';
 
                     this.quill.on('text-change', () => {
-                        this.content = this.quill.root.innerHTML;
-                        this.$wire.set('content', this.content, false);
+                        Alpine.store('postModal').content = this.quill.root.innerHTML;
                     });
                 }
             });
         },
 
-        close() {
-            this.bootstrapModal.hide();
+        save() {
+            Livewire.dispatch('save-post-content', {
+                content: Alpine.store('postModal').content
+            });
+
+            this.originalContent = Alpine.store('postModal').content;
+            this.editing = false;
+
+            // Закрываем модальное
+            const modal = bootstrap.Modal.getInstance(document.getElementById('postModal'));
+            if (modal) modal.hide();
+        },
+
+        cancel() {
+            Alpine.store('postModal').content = this.originalContent;
+            this.editing = false;
+
+            // Закрываем модальное при отмене (по желанию)
+            const modal = bootstrap.Modal.getInstance(document.getElementById('postModal'));
+            if (modal) modal.hide();
         }
     }));
 });
